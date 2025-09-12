@@ -50,10 +50,12 @@ public class DemandeIntervention implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "testeur_code_gmao")
+    @JsonBackReference
     private Testeur testeur;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "technicien_id")
     private User technicienAssigne;
+
 }
 

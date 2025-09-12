@@ -145,6 +145,67 @@ public class DemandeInterventionController {
             ), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    @PutMapping("/assign/{interventionId}/technicien/{technicienId}")
+    public ResponseEntity<?> assignTechnicianToIntervention(
+            @PathVariable Long interventionId, 
+            @PathVariable Long technicienId) {
+        try {
+            DemandeInterventionDTO updatedIntervention = demandeInterventionService
+                .assignTechnicianToIntervention(interventionId, technicienId);
+            return new ResponseEntity<>(updatedIntervention, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de l'affectation",
+                "message", e.getMessage()
+            ), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/assign/{interventionId}/testeur/{testeurCodeGMAO}")
+    public ResponseEntity<?> assignTesteurToIntervention(
+            @PathVariable Long interventionId, 
+            @PathVariable String testeurCodeGMAO) {
+        try {
+            DemandeInterventionDTO updatedIntervention = demandeInterventionService
+                .assignTesteurToIntervention(interventionId, testeurCodeGMAO);
+            return new ResponseEntity<>(updatedIntervention, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de l'affectation du testeur",
+                "message", e.getMessage()
+            ), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/confirmer/{interventionId}")
+    public ResponseEntity<?> confirmerIntervention(@PathVariable Long interventionId) {
+        try {
+            DemandeInterventionDTO updatedIntervention = demandeInterventionService
+                .confirmerIntervention(interventionId);
+            return new ResponseEntity<>(updatedIntervention, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la confirmation",
+                "message", e.getMessage()
+            ), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<Void> deleteDemande(@PathVariable Long id) {
         demandeInterventionService.deleteDemande(id);

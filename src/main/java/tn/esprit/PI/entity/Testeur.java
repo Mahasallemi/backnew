@@ -1,15 +1,14 @@
 package tn.esprit.PI.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Entity
 @Table(name = "testeurs")
@@ -29,6 +28,12 @@ public class Testeur implements Serializable {
     @Column(name = "ligne", nullable = false)
     private String ligne;
 
-    @Column(name = "banc_de_test", nullable = false)
+    @Column(name = "banc_de_Test", nullable = false)
     private String bancTest;
+
+    // Relation One-to-Many avec DemandeIntervention
+    // Un testeur (équipement) peut avoir plusieurs interventions
+    @OneToMany(mappedBy = "testeur", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
+    private List<DemandeIntervention> interventions;
 }
