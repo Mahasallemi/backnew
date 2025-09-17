@@ -24,4 +24,9 @@ public interface BonDeTravailRepository extends JpaRepository<BonDeTravail, Long
     
     @Query("SELECT COUNT(b) FROM BonDeTravail b WHERE b.statut = :statut AND b.dateCreation BETWEEN :dateDebut AND :dateFin")
     Long countByStatutAndDateCreationBetween(@Param("statut") StatutBonTravail statut, @Param("dateDebut") LocalDate dateDebut, @Param("dateFin") LocalDate dateFin);
+    
+    // Méthodes pour les nouvelles associations
+    List<BonDeTravail> findByInterventionId(Long interventionId);
+    
+    List<BonDeTravail> findByTesteurCodeGMAO(String testeurCodeGMAO);
 }

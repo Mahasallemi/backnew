@@ -3,6 +3,7 @@ package tn.esprit.PI.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,6 +26,7 @@ public class BonTravailComponent {
 
     @ManyToOne
     @JoinColumn(name = "component_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Component component;
 
     @Column(nullable = false)

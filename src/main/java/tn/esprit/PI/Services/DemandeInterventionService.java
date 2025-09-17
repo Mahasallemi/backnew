@@ -34,28 +34,45 @@ public class DemandeInterventionService {
 
 
     // Récupérer une demande par ID
-  /*  public Optional<DemandeInterventionDTO> getDemandeById(Long id) {
-        return repository.findById(id).map(demande -> {
-            String typeDemande;
-            if (demande instanceof Curative) {
-                typeDemande = "CURATIVE";
-            } else if (demande instanceof Preventive) {
-                typeDemande = "PREVENTIVE";
-            } else {
-                typeDemande = "INCONNU";
+    public Optional<DemandeInterventionDTO> getDemandeById(Long id) {
+        try {
+            List<Map<String, Object>> rawData = repository.findAllWithNullSafeDates();
+            Map<String, Object> row = rawData.stream()
+                .filter(r -> ((Number) r.get("id")).longValue() == id)
+                .findFirst()
+                .orElse(null);
+            
+            if (row == null) {
+                return Optional.empty();
             }
-
-            return new DemandeInterventionDTO(
-                    demande.getId(),
-                    demande.getDescription(),
-                    demande.getDateDemande(),
-                    demande.getStatut(),
-                    demande.getPriorite(),
-                    demande.getDemandeur() != null ? demande.getDemandeur().getId() : null,
-                    typeDemande
-            );
-        });
-    }*/
+            
+            DemandeInterventionDTO dto = new DemandeInterventionDTO();
+            dto.setId(((Number) row.get("id")).longValue());
+            dto.setDescription((String) row.get("description"));
+            dto.setDateDemande((java.util.Date) row.get("date_demande"));
+            dto.setStatut(StatutDemande.valueOf((String) row.get("statut")));
+            dto.setPriorite((String) row.get("priorite"));
+            dto.setDemandeurId(row.get("demandeur") != null ? ((Number) row.get("demandeur")).longValue() : null);
+            dto.setTypeDemande((String) row.get("type_demande"));
+            dto.setDateCreation((java.util.Date) row.get("date_creation"));
+            dto.setDateValidation((java.util.Date) row.get("date_validation"));
+            dto.setConfirmation(row.get("confirmation") != null ? ((Number) row.get("confirmation")).intValue() : 0);
+            dto.setTesteurCodeGMAO((String) row.get("testeur_code_gmao"));
+            dto.setTechnicienAssigneId(row.get("technicien_id") != null ? ((Number) row.get("technicien_id")).longValue() : null);
+            
+            // Map type-specific fields
+            dto.setPanne((String) row.get("panne"));
+            dto.setUrgence(row.get("urgence") != null ? (Boolean) row.get("urgence") : null);
+            dto.setFrequence((String) row.get("frequence"));
+            dto.setProchainRDV((java.util.Date) row.get("prochainrdv"));
+            
+            return Optional.of(dto);
+        } catch (Exception e) {
+            System.out.println("❌ Error in getDemandeById: " + e.getMessage());
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
 
 
     // Récupérer toutes les demandes
@@ -79,6 +96,12 @@ public class DemandeInterventionService {
                 dto.setConfirmation(row.get("confirmation") != null ? ((Number) row.get("confirmation")).intValue() : 0);
                 dto.setTesteurCodeGMAO((String) row.get("testeur_code_gmao"));
                 dto.setTechnicienAssigneId(row.get("technicien_id") != null ? ((Number) row.get("technicien_id")).longValue() : null);
+                
+                // Map type-specific fields from native query
+                dto.setPanne((String) row.get("panne"));
+                dto.setUrgence(row.get("urgence") != null ? (Boolean) row.get("urgence") : null);
+                dto.setFrequence((String) row.get("frequence"));
+                dto.setProchainRDV((java.util.Date) row.get("prochainrdv"));
                 
                 return dto;
             }).toList();
@@ -146,26 +169,59 @@ public class DemandeInterventionService {
     // Assigner un technicien à une intervention
     public DemandeInterventionDTO assignTechnicianToIntervention(Long interventionId, Long technicienId) {
         try {
-            DemandeIntervention demande = repository.findById(interventionId)
-                .orElseThrow(() -> new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId));
+            // Vérifier que l'intervention existe en utilisant la requête native sécurisée
+            List<Map<String, Object>> rawData = repository.findAllWithNullSafeDates();
+            boolean interventionExists = rawData.stream()
+                .anyMatch(row -> ((Number) row.get("id")).longValue() == interventionId);
             
-            User technicien = userRepository.findById(technicienId)
-                .orElseThrow(() -> new RuntimeException("Technicien non trouvé avec l'ID: " + technicienId));
-            
-            // Assigner le technicien
-            demande.setTechnicienAssigne(technicien);
-            
-            // Changer le statut à EN_COURS si c'était EN_ATTENTE
-            if (demande.getStatut() == StatutDemande.EN_ATTENTE) {
-                demande.setStatut(StatutDemande.EN_COURS);
+            if (!interventionExists) {
+                throw new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId);
             }
             
-            // Sauvegarder
-            DemandeIntervention updatedDemande = repository.save(demande);
+            // Vérifier que le technicien existe
+            if (!userRepository.existsById(technicienId)) {
+                throw new RuntimeException("Technicien non trouvé avec l'ID: " + technicienId);
+            }
             
-            // Créer le DTO de retour
-            return createDTOFromEntity(updatedDemande);
+            // Utiliser la requête native pour assigner le technicien
+            int rowsUpdated = repository.assignTechnicianNative(interventionId, technicienId);
             
+            if (rowsUpdated == 0) {
+                throw new RuntimeException("Aucune ligne mise à jour pour l'ID: " + interventionId);
+            }
+            
+            // Récupérer l'intervention mise à jour en utilisant la requête native sécurisée
+            rawData = repository.findAllWithNullSafeDates();
+            Map<String, Object> updatedRow = rawData.stream()
+                .filter(row -> ((Number) row.get("id")).longValue() == interventionId)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Impossible de récupérer l'intervention mise à jour"));
+            
+            // Créer le DTO de retour à partir des données natives
+            DemandeInterventionDTO resultDto = new DemandeInterventionDTO();
+            resultDto.setId(((Number) updatedRow.get("id")).longValue());
+            resultDto.setDescription((String) updatedRow.get("description"));
+            resultDto.setDateDemande((java.util.Date) updatedRow.get("date_demande"));
+            resultDto.setStatut(StatutDemande.valueOf((String) updatedRow.get("statut")));
+            resultDto.setPriorite((String) updatedRow.get("priorite"));
+            resultDto.setDemandeurId(updatedRow.get("demandeur") != null ? ((Number) updatedRow.get("demandeur")).longValue() : null);
+            resultDto.setTypeDemande((String) updatedRow.get("type_demande"));
+            resultDto.setDateCreation((java.util.Date) updatedRow.get("date_creation"));
+            resultDto.setDateValidation((java.util.Date) updatedRow.get("date_validation"));
+            resultDto.setConfirmation(updatedRow.get("confirmation") != null ? ((Number) updatedRow.get("confirmation")).intValue() : 0);
+            resultDto.setTesteurCodeGMAO((String) updatedRow.get("testeur_code_gmao"));
+            resultDto.setTechnicienAssigneId(updatedRow.get("technicien_id") != null ? ((Number) updatedRow.get("technicien_id")).longValue() : null);
+            
+            // Map type-specific fields
+            resultDto.setPanne((String) updatedRow.get("panne"));
+            resultDto.setUrgence(updatedRow.get("urgence") != null ? (Boolean) updatedRow.get("urgence") : null);
+            resultDto.setFrequence((String) updatedRow.get("frequence"));
+            resultDto.setProchainRDV((java.util.Date) updatedRow.get("prochainrdv"));
+            
+            return resultDto;
+            
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             System.out.println("❌ Erreur lors de l'affectation du technicien: " + e.getMessage());
             e.printStackTrace();
@@ -176,21 +232,59 @@ public class DemandeInterventionService {
     // Assigner un testeur (équipement) à une intervention
     public DemandeInterventionDTO assignTesteurToIntervention(Long interventionId, String testeurCodeGMAO) {
         try {
-            DemandeIntervention demande = repository.findById(interventionId)
-                .orElseThrow(() -> new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId));
+            // Vérifier que l'intervention existe en utilisant la requête native sécurisée
+            List<Map<String, Object>> rawData = repository.findAllWithNullSafeDates();
+            boolean interventionExists = rawData.stream()
+                .anyMatch(row -> ((Number) row.get("id")).longValue() == interventionId);
             
-            Testeur testeur = testeurRepository.findById(testeurCodeGMAO)
-                .orElseThrow(() -> new RuntimeException("Testeur/Équipement non trouvé avec le code: " + testeurCodeGMAO));
+            if (!interventionExists) {
+                throw new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId);
+            }
             
-            // Assigner le testeur (équipement)
-            demande.setTesteur(testeur);
+            // Vérifier que le testeur existe
+            if (!testeurRepository.existsById(testeurCodeGMAO)) {
+                throw new RuntimeException("Testeur/Équipement non trouvé avec le code: " + testeurCodeGMAO);
+            }
             
-            // Sauvegarder
-            DemandeIntervention updatedDemande = repository.save(demande);
+            // Utiliser la requête native pour assigner le testeur
+            int rowsUpdated = repository.assignTesteurNative(interventionId, testeurCodeGMAO);
             
-            // Créer le DTO de retour
-            return createDTOFromEntity(updatedDemande);
+            if (rowsUpdated == 0) {
+                throw new RuntimeException("Aucune ligne mise à jour pour l'ID: " + interventionId);
+            }
             
+            // Récupérer l'intervention mise à jour en utilisant la requête native sécurisée
+            rawData = repository.findAllWithNullSafeDates();
+            Map<String, Object> updatedRow = rawData.stream()
+                .filter(row -> ((Number) row.get("id")).longValue() == interventionId)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Impossible de récupérer l'intervention mise à jour"));
+            
+            // Créer le DTO de retour à partir des données natives
+            DemandeInterventionDTO resultDto = new DemandeInterventionDTO();
+            resultDto.setId(((Number) updatedRow.get("id")).longValue());
+            resultDto.setDescription((String) updatedRow.get("description"));
+            resultDto.setDateDemande((java.util.Date) updatedRow.get("date_demande"));
+            resultDto.setStatut(StatutDemande.valueOf((String) updatedRow.get("statut")));
+            resultDto.setPriorite((String) updatedRow.get("priorite"));
+            resultDto.setDemandeurId(updatedRow.get("demandeur") != null ? ((Number) updatedRow.get("demandeur")).longValue() : null);
+            resultDto.setTypeDemande((String) updatedRow.get("type_demande"));
+            resultDto.setDateCreation((java.util.Date) updatedRow.get("date_creation"));
+            resultDto.setDateValidation((java.util.Date) updatedRow.get("date_validation"));
+            resultDto.setConfirmation(updatedRow.get("confirmation") != null ? ((Number) updatedRow.get("confirmation")).intValue() : 0);
+            resultDto.setTesteurCodeGMAO((String) updatedRow.get("testeur_code_gmao"));
+            resultDto.setTechnicienAssigneId(updatedRow.get("technicien_id") != null ? ((Number) updatedRow.get("technicien_id")).longValue() : null);
+            
+            // Map type-specific fields
+            resultDto.setPanne((String) updatedRow.get("panne"));
+            resultDto.setUrgence(updatedRow.get("urgence") != null ? (Boolean) updatedRow.get("urgence") : null);
+            resultDto.setFrequence((String) updatedRow.get("frequence"));
+            resultDto.setProchainRDV((java.util.Date) updatedRow.get("prochainrdv"));
+            
+            return resultDto;
+            
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             System.out.println("❌ Erreur lors de l'affectation du testeur: " + e.getMessage());
             e.printStackTrace();
@@ -201,24 +295,54 @@ public class DemandeInterventionService {
     // Confirmer une intervention (met confirmation = 1 et dateValidation = maintenant)
     public DemandeInterventionDTO confirmerIntervention(Long interventionId) {
         try {
-            DemandeIntervention demande = repository.findById(interventionId)
-                .orElseThrow(() -> new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId));
+            // Vérifier que l'intervention existe en utilisant la requête native sécurisée
+            List<Map<String, Object>> rawData = repository.findAllWithNullSafeDates();
+            boolean interventionExists = rawData.stream()
+                .anyMatch(row -> ((Number) row.get("id")).longValue() == interventionId);
             
-            // Confirmer l'intervention
-            demande.setConfirmation(1);
-            demande.setDateValidation(new java.util.Date());
-            
-            // Changer le statut à TERMINEE si pas déjà fait
-            if (demande.getStatut() != StatutDemande.TERMINEE) {
-                demande.setStatut(StatutDemande.TERMINEE);
+            if (!interventionExists) {
+                throw new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId);
             }
             
-            // Sauvegarder
-            DemandeIntervention updatedDemande = repository.save(demande);
+            // Utiliser la requête native pour confirmer l'intervention
+            int rowsUpdated = repository.confirmerInterventionNative(interventionId);
             
-            // Créer le DTO de retour
-            return createDTOFromEntity(updatedDemande);
+            if (rowsUpdated == 0) {
+                throw new RuntimeException("Aucune ligne mise à jour pour l'ID: " + interventionId);
+            }
             
+            // Récupérer l'intervention confirmée en utilisant la requête native sécurisée
+            rawData = repository.findAllWithNullSafeDates();
+            Map<String, Object> updatedRow = rawData.stream()
+                .filter(row -> ((Number) row.get("id")).longValue() == interventionId)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Impossible de récupérer l'intervention confirmée"));
+            
+            // Créer le DTO de retour à partir des données natives
+            DemandeInterventionDTO resultDto = new DemandeInterventionDTO();
+            resultDto.setId(((Number) updatedRow.get("id")).longValue());
+            resultDto.setDescription((String) updatedRow.get("description"));
+            resultDto.setDateDemande((java.util.Date) updatedRow.get("date_demande"));
+            resultDto.setStatut(StatutDemande.valueOf((String) updatedRow.get("statut")));
+            resultDto.setPriorite((String) updatedRow.get("priorite"));
+            resultDto.setDemandeurId(updatedRow.get("demandeur") != null ? ((Number) updatedRow.get("demandeur")).longValue() : null);
+            resultDto.setTypeDemande((String) updatedRow.get("type_demande"));
+            resultDto.setDateCreation((java.util.Date) updatedRow.get("date_creation"));
+            resultDto.setDateValidation((java.util.Date) updatedRow.get("date_validation"));
+            resultDto.setConfirmation(updatedRow.get("confirmation") != null ? ((Number) updatedRow.get("confirmation")).intValue() : 0);
+            resultDto.setTesteurCodeGMAO((String) updatedRow.get("testeur_code_gmao"));
+            resultDto.setTechnicienAssigneId(updatedRow.get("technicien_id") != null ? ((Number) updatedRow.get("technicien_id")).longValue() : null);
+            
+            // Map type-specific fields
+            resultDto.setPanne((String) updatedRow.get("panne"));
+            resultDto.setUrgence(updatedRow.get("urgence") != null ? (Boolean) updatedRow.get("urgence") : null);
+            resultDto.setFrequence((String) updatedRow.get("frequence"));
+            resultDto.setProchainRDV((java.util.Date) updatedRow.get("prochainrdv"));
+            
+            return resultDto;
+            
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             System.out.println("❌ Erreur lors de la confirmation: " + e.getMessage());
             e.printStackTrace();
@@ -312,6 +436,12 @@ public class DemandeInterventionService {
             resultDto.setConfirmation(updatedRow.get("confirmation") != null ? ((Number) updatedRow.get("confirmation")).intValue() : 0);
             resultDto.setTesteurCodeGMAO((String) updatedRow.get("testeur_code_gmao"));
             resultDto.setTechnicienAssigneId(updatedRow.get("technicien_id") != null ? ((Number) updatedRow.get("technicien_id")).longValue() : null);
+            
+            // Map type-specific fields
+            resultDto.setPanne((String) updatedRow.get("panne"));
+            resultDto.setUrgence(updatedRow.get("urgence") != null ? (Boolean) updatedRow.get("urgence") : null);
+            resultDto.setFrequence((String) updatedRow.get("frequence"));
+            resultDto.setProchainRDV((java.util.Date) updatedRow.get("prochainrdv"));
             
             return resultDto;
             

@@ -17,6 +17,10 @@ public class BonTravailRequest {
         // ✅ Permettre à la fois Long et Object pour technicien
         public Long technicien; // technicienId
         
+        // Nouveaux champs pour les associations
+        public Long interventionId; // ID de l'intervention associée
+        public String testeurCodeGMAO; // Code GMAO du testeur (équipement)
+        
         // ✅ Setter personnalisé pour gérer les deux formats
         @JsonSetter("technicien")
         public void setTechnicien(JsonNode technicienNode) {

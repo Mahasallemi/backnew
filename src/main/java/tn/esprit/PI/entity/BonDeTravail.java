@@ -1,6 +1,7 @@
 package tn.esprit.PI.entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
@@ -37,11 +38,20 @@ public class BonDeTravail {
 
     @ManyToOne
     @JoinColumn(name = "technicien_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "sousProjets", "password", "token", "resetToken"})
     User technicien;
 
+    // Association avec l'intervention (optionnelle pour compatibilité)
+    @ManyToOne
+    @JoinColumn(name = "intervention_id", nullable = true)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    DemandeIntervention intervention;
 
-
-
+    // Association avec le testeur (équipement) (optionnelle pour compatibilité)
+    @ManyToOne
+    @JoinColumn(name = "testeur_code_gmao", nullable = true)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    Testeur testeur;
 
     @OneToMany(mappedBy = "bon", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference

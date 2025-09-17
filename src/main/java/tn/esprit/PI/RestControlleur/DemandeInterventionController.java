@@ -5,6 +5,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.esprit.PI.Services.DemandeInterventionService;
+import tn.esprit.PI.Services.BonDeTravailService;
+import tn.esprit.PI.entity.DemandeInterventionDTO;
+import tn.esprit.PI.entity.BonDeTravail;
+import tn.esprit.PI.entity.BonTravailRequest;
 import tn.esprit.PI.entity.StatutDemande;
 import tn.esprit.PI.entity.*;
 import tn.esprit.PI.repository.DemandeInterventionRepository;
@@ -28,6 +32,9 @@ public class DemandeInterventionController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private BonDeTravailService bonDeTravailService;
 
     @PostMapping("/create")
     public ResponseEntity<?> createIntervention(@RequestBody Map<String, Object> requestData) {
@@ -102,13 +109,12 @@ public class DemandeInterventionController {
         }
     }
 
-/*
     @GetMapping("/recuperer/{id}")
     public ResponseEntity<DemandeInterventionDTO> getDemandeById(@PathVariable Long id) {
         Optional<DemandeInterventionDTO> demande = demandeInterventionService.getDemandeById(id);
         return demande.map(response -> new ResponseEntity<>(response, HttpStatus.OK))
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
-    }*/
+    }
 
     @GetMapping("/recuperer/all")
     public ResponseEntity<List<DemandeInterventionDTO>> getAllDemandes() {
@@ -210,5 +216,42 @@ public class DemandeInterventionController {
     public ResponseEntity<Void> deleteDemande(@PathVariable Long id) {
         demandeInterventionService.deleteDemande(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    // Créer un bon de travail pour une intervention
+    @PostMapping("/{interventionId}/bon-travail/technicien/{technicienId}")
+    public ResponseEntity<?> createBonDeTravailForIntervention(
+            @PathVariable Long interventionId,
+            @PathVariable Long technicienId,
+            @RequestBody BonTravailRequest request) {
+        try {
+            BonDeTravail bon = bonDeTravailService.createBonDeTravailFromIntervention(
+                interventionId, technicienId, request);
+            return new ResponseEntity<>(bon, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la création du bon de travail",
+                "message", e.getMessage()
+            ), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Récupérer tous les bons de travail d'une intervention
+    @GetMapping("/{interventionId}/bons-travail")
+    public ResponseEntity<?> getBonsDeTravailForIntervention(@PathVariable Long interventionId) {
+        try {
+            List<BonDeTravail> bons = bonDeTravailService.getBonsDeTravailByIntervention(interventionId);
+            return new ResponseEntity<>(bons, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la récupération des bons de travail",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 }

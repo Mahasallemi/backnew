@@ -116,5 +116,55 @@ public class BonDeTravailController {
             ), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    // Créer un bon de travail basé sur une intervention
+    @PostMapping("/intervention/{interventionId}/technicien/{technicienId}")
+    public ResponseEntity<?> createFromIntervention(
+            @PathVariable Long interventionId,
+            @PathVariable Long technicienId,
+            @RequestBody BonTravailRequest request) {
+        try {
+            BonDeTravail bon = bonService.createBonDeTravailFromIntervention(interventionId, technicienId, request);
+            return new ResponseEntity<>(bon, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la création du bon de travail",
+                "message", e.getMessage()
+            ), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Récupérer tous les bons de travail d'une intervention
+    @GetMapping("/intervention/{interventionId}")
+    public ResponseEntity<?> getByIntervention(@PathVariable Long interventionId) {
+        try {
+            List<BonDeTravail> bons = bonService.getBonsDeTravailByIntervention(interventionId);
+            return new ResponseEntity<>(bons, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la récupération des bons de travail",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Récupérer tous les bons de travail d'un testeur (équipement)
+    @GetMapping("/testeur/{testeurCodeGMAO}")
+    public ResponseEntity<?> getByTesteur(@PathVariable String testeurCodeGMAO) {
+        try {
+            List<BonDeTravail> bons = bonService.getBonsDeTravailByTesteur(testeurCodeGMAO);
+            return new ResponseEntity<>(bons, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(Map.of(
+                "error", "Erreur lors de la récupération des bons de travail",
+                "message", e.getMessage()
+            ), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
 

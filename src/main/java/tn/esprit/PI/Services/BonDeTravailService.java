@@ -7,6 +7,8 @@ import tn.esprit.PI.entity.*;
 import tn.esprit.PI.repository.BonDeTravailRepository;
 import tn.esprit.PI.repository.ComponentRp;
 import tn.esprit.PI.repository.UserRepository;
+import tn.esprit.PI.repository.DemandeInterventionRepository;
+import tn.esprit.PI.repository.TesteurRepository;
 import tn.esprit.PI.mapper.BonTravailMapper;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,8 @@ public class BonDeTravailService {
     private final BonDeTravailRepository bonDeTravailRepository;
     private final UserRepository technicienRepository;
     private final ComponentRp composantRepository;
+    private final DemandeInterventionRepository interventionRepository;
+    private final TesteurRepository testeurRepository;
 
     public List<BonDeTravail> getAllBonDeTravail() {
         return bonDeTravailRepository.findAll();
@@ -52,6 +56,20 @@ public class BonDeTravailService {
                 ).orElseThrow(() -> new RuntimeException("Technicien non trouvé"))
         );
 
+        // Associer l'intervention si fournie
+        if (dto.interventionId != null) {
+            DemandeIntervention intervention = interventionRepository.findById(dto.interventionId)
+                .orElseThrow(() -> new RuntimeException("Intervention non trouvée avec l'ID: " + dto.interventionId));
+            bon.setIntervention(intervention);
+        }
+
+        // Associer le testeur si fourni
+        if (dto.testeurCodeGMAO != null) {
+            Testeur testeur = testeurRepository.findById(dto.testeurCodeGMAO)
+                .orElseThrow(() -> new RuntimeException("Testeur non trouvé avec le code: " + dto.testeurCodeGMAO));
+            bon.setTesteur(testeur);
+        }
+
         // ✅ Plus besoin de findAllById ici
         List<BonTravailComponent> composantsFinal = new ArrayList<>();
 
@@ -82,6 +100,83 @@ public class BonDeTravailService {
         bon.setComposants(composantsFinal);
 
         return bonDeTravailRepository.save(bon);
+    }
+
+    // Créer un bon de travail basé sur une intervention existante
+    public BonDeTravail createBonDeTravailFromIntervention(Long interventionId, Long technicienId, BonTravailRequest dto) {
+        // Vérifier que l'intervention existe et récupérer ses informations
+        if (!interventionRepository.existsById(interventionId)) {
+            throw new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId);
+        }
+
+        // Récupérer l'intervention avec ses associations (testeur)
+        DemandeIntervention intervention = interventionRepository.findById(interventionId)
+            .orElseThrow(() -> new RuntimeException("Intervention non trouvée avec l'ID: " + interventionId));
+
+        // Vérifier que l'intervention a un testeur (équipement) associé
+        if (intervention.getTesteur() == null) {
+            throw new RuntimeException("L'intervention doit avoir un testeur (équipement) associé pour créer un bon de travail");
+        }
+
+        // Vérifier que le technicien existe
+        User technicien = technicienRepository.findById(technicienId)
+            .orElseThrow(() -> new RuntimeException("Technicien non trouvé avec l'ID: " + technicienId));
+
+        // Créer le bon de travail
+        BonDeTravail bon = new BonDeTravail();
+        bon.setDescription(dto.description != null ? dto.description : 
+            "Bon de travail pour intervention: " + intervention.getDescription());
+        bon.setDateCreation(dto.dateCreation);
+        bon.setDateDebut(dto.dateDebut);
+        bon.setDateFin(dto.dateFin);
+        bon.setStatut(dto.statut != null ? dto.statut : StatutBonTravail.EN_ATTENTE);
+        bon.setTechnicien(technicien);
+        
+        // Associer l'intervention et le testeur
+        bon.setIntervention(intervention);
+        bon.setTesteur(intervention.getTesteur());
+
+        // Traiter les composants si fournis
+        List<BonTravailComponent> composantsFinal = new ArrayList<>();
+        if (dto.composants != null && !dto.composants.isEmpty()) {
+            for (BonTravailRequest.ComposantQuantite cq : dto.composants) {
+                Component composant = composantRepository.findById(cq.id)
+                        .orElseThrow(() -> new RuntimeException("Composant non trouvé : " + cq.id));
+
+                try {
+                    int stockActuel = Integer.parseInt(composant.getTrartQuantite());
+                    if (stockActuel >= cq.quantite) {
+                        composant.setTrartQuantite(String.valueOf(stockActuel - cq.quantite));
+                        composantRepository.save(composant);
+
+                        BonTravailComponent btc = new BonTravailComponent();
+                        btc.setBon(bon);
+                        btc.setComponent(composant);
+                        btc.setQuantiteUtilisee(cq.quantite);
+                        composantsFinal.add(btc);
+                    } else {
+                        throw new RuntimeException("Quantité insuffisante pour " + composant.getTrartArticle()
+                                + " (stock: " + stockActuel + ", demandé: " + cq.quantite + ")");
+                    }
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("Quantité invalide dans l'article : " + composant.getTrartArticle());
+                }
+            }
+        }
+
+        bon.setComposants(composantsFinal);
+
+        return bonDeTravailRepository.save(bon);
+    }
+
+    // Récupérer tous les bons de travail d'une intervention
+    public List<BonDeTravail> getBonsDeTravailByIntervention(Long interventionId) {
+        return bonDeTravailRepository.findByInterventionId(interventionId);
+    }
+
+    // Récupérer tous les bons de travail d'un testeur (équipement)
+    public List<BonDeTravail> getBonsDeTravailByTesteur(String testeurCodeGMAO) {
+        return bonDeTravailRepository.findByTesteurCodeGMAO(testeurCodeGMAO);
     }
 
 
