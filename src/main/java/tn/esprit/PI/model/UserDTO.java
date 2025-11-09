@@ -32,7 +32,7 @@ public class UserDTO {
 
     @Size(max = 255)
     private String adress;
-    private String resetToken;  // Add this line
+    private String resetToken;
 
 
     private UserRole role;

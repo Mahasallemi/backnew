@@ -245,7 +245,7 @@ public class UserServiceImp implements IserviceUser {
         if (userOpt.isPresent()) {
             return userOpt.get().getId();
         }
-        return null; // ou throw new EntityNotFoundException("User not found with email: " + Email);
+        return null;
     }
     @Override
     public void initiatePasswordReset(String email) {
