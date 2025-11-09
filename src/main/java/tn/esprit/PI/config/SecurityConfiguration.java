@@ -40,10 +40,10 @@ public class SecurityConfiguration {
 
         http
                 .csrf().disable()
-                .headers(headers -> headers.frameOptions().disable()) // Pour H2 Console
                 .cors(cors -> cors.configurationSource(source)) // Utiliser la configuration CORS définie
                 .authorizeHttpRequests(authorizeRequests ->
                         authorizeRequests
+                                .requestMatchers("/actuator/**").permitAll()
                                 .requestMatchers(
                                         "/",
                                         "/user/**",
