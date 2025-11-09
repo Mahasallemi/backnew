@@ -1,7 +1,7 @@
 package tn.esprit.PI.RestControlleur;
 
 
-import io.swagger.annotations.ApiOperation;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +27,7 @@ public class ProjectController {
     }
 
     @GetMapping("/all")
-    @ApiOperation(value = "Récupérer tous les projets", response = Project.class, responseContainer = "List")
+    @Operation(summary = "Récupérer tous les projets")
     public ResponseEntity<List<Project>> getAllProjects() {
         List<Project> projects = projectService.getAllProjets();
         return ResponseEntity.ok(projects);

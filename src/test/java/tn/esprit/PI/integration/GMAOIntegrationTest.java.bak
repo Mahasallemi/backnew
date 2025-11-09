@@ -28,7 +28,7 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureWebMvc
 @ActiveProfiles("test")
 class GMAOIntegrationTest {
@@ -195,7 +195,7 @@ class GMAOIntegrationTest {
         mockBonDeTravail.setTechnicien(mockTechnicien);
 
         when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(mockTechnicien));
-        when(interventionRepository.findById(1L)).thenReturn(java.util.Optional.of(mockIntervention));
+        when(demandeInterventionRepository.findById(1L)).thenReturn(java.util.Optional.of(mockIntervention));
         when(testeurRepository.findById("TEST001")).thenReturn(java.util.Optional.of(mockTesteur));
         when(componentRepository.findById("COMP001")).thenReturn(java.util.Optional.of(mockComponent));
         when(bonDeTravailRepository.save(any(BonDeTravail.class))).thenReturn(mockBonDeTravail);
@@ -288,7 +288,7 @@ class GMAOIntegrationTest {
 
         mockMvc.perform(put("/PI/demandes/assign/{interventionId}/testeur/{testeurCodeGMAO}",
                         interventionId, testeurCodeGMAO))
-                .andExpected(status().isOk())
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.testeurCodeGMAO").value(testeurCodeGMAO));
 
         // Step 4: Confirm intervention

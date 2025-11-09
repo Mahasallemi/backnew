@@ -1,6 +1,7 @@
 package tn.esprit.PI.util;
 
 import tn.esprit.PI.entity.*;
+import tn.esprit.PI.model.UserDTO;
 
 import java.time.LocalDate;
 import java.util.Date;
