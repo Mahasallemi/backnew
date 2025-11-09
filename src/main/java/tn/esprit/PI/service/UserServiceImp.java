@@ -241,10 +241,11 @@ public class UserServiceImp implements IserviceUser {
     }
     @Override
     public Long RetrieveveUserIdByEmail(String Email) {
-
-        User u = userRepository.findByEmail(Email).get();
-        return u.getId();
-
+        Optional<User> userOpt = userRepository.findByEmail(Email);
+        if (userOpt.isPresent()) {
+            return userOpt.get().getId();
+        }
+        return null; // ou throw new EntityNotFoundException("User not found with email: " + Email);
     }
     @Override
     public void initiatePasswordReset(String email) {

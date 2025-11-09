@@ -377,7 +377,7 @@ public class KPIService {
      * Calcule les dates décalées pour l'historique
      */
     private LocalDate[] calculerDatesDecalees(String periode, int decalage) {
-        LocalDate dateFin = LocalDate.now().minusDays(decalage * getDureeEnJours(periode));
+        LocalDate dateFin = LocalDate.now().minusDays((long) decalage * getDureeEnJours(periode));
         LocalDate dateDebut;
         
         switch (periode.toUpperCase()) {
