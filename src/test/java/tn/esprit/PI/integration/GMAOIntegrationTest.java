@@ -1,0 +1,355 @@
+package tn.esprit.PI.integration;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import tn.esprit.PI.entity.*;
+import tn.esprit.PI.repository.*;
+
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureWebMvc
+@ActiveProfiles("test")
+class GMAOIntegrationTest {
+
+    @Autowired
+    private WebApplicationContext webApplicationContext;
+
+    @MockBean
+    private DemandeInterventionRepository demandeInterventionRepository;
+
+    @MockBean
+    private TesteurRepository testeurRepository;
+
+    @MockBean
+    private BonDeTravailRepository bonDeTravailRepository;
+
+    @MockBean
+    private UserRepository userRepository;
+
+    @MockBean
+    private ComponentRp componentRepository;
+
+    private MockMvc mockMvc;
+    private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders
+                .webAppContextSetup(webApplicationContext)
+                .apply(springSecurity())
+                .build();
+        objectMapper = new ObjectMapper();
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testGetAllInterventions_Integration() throws Exception {
+        // Given
+        Map<String, Object> mockData = new HashMap<>();
+        mockData.put("id", 1L);
+        mockData.put("description", "Test intervention");
+        mockData.put("date_demande", new Date());
+        mockData.put("statut", "EN_ATTENTE");
+        mockData.put("priorite", "HAUTE");
+        mockData.put("demandeur", 1L);
+        mockData.put("type_demande", "CURATIVE");
+        mockData.put("date_creation", new Date());
+        mockData.put("date_validation", null);
+        mockData.put("confirmation", 0);
+        mockData.put("testeur_code_gmao", "TEST001");
+        mockData.put("technicien_id", null);
+        mockData.put("panne", "Panne moteur");
+        mockData.put("urgence", true);
+        mockData.put("frequence", null);
+        mockData.put("prochainrdv", null);
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockData));
+
+        // When & Then
+        mockMvc.perform(get("/PI/demandes/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].description").value("Test intervention"))
+                .andExpect(jsonPath("$[0].statut").value("EN_ATTENTE"))
+                .andExpect(jsonPath("$[0].typeDemande").value("CURATIVE"))
+                .andExpect(jsonPath("$[0].panne").value("Panne moteur"))
+                .andExpect(jsonPath("$[0].urgence").value(true));
+
+        verify(demandeInterventionRepository, times(1)).findAllWithNullSafeDates();
+    }
+
+    @Test
+    @WithMockUser(roles = "TECHNICIEN_CURATIF")
+    void testAssignTechnicianToIntervention_Integration() throws Exception {
+        // Given
+        Long interventionId = 1L;
+        Long technicienId = 2L;
+
+        Map<String, Object> mockDataBefore = new HashMap<>();
+        mockDataBefore.put("id", interventionId);
+        mockDataBefore.put("description", "Test intervention");
+        mockDataBefore.put("statut", "EN_ATTENTE");
+        mockDataBefore.put("technicien_id", null);
+
+        Map<String, Object> mockDataAfter = new HashMap<>(mockDataBefore);
+        mockDataAfter.put("technicien_id", technicienId);
+        mockDataAfter.put("statut", "EN_COURS");
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockDataBefore))
+                .thenReturn(Arrays.asList(mockDataAfter));
+        when(userRepository.existsById(technicienId)).thenReturn(true);
+        when(demandeInterventionRepository.assignTechnicianNative(interventionId, technicienId))
+                .thenReturn(1);
+
+        // When & Then
+        mockMvc.perform(put("/PI/demandes/assign/{interventionId}/technicien/{technicienId}",
+                        interventionId, technicienId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(interventionId))
+                .andExpect(jsonPath("$.technicienAssigneId").value(technicienId))
+                .andExpect(jsonPath("$.statut").value("EN_COURS"));
+
+        verify(demandeInterventionRepository, times(1))
+                .assignTechnicianNative(interventionId, technicienId);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testGetAllTesteurs_Integration() throws Exception {
+        // Given
+        Testeur mockTesteur = new Testeur();
+        mockTesteur.setCodeGMAO("TEST001");
+        mockTesteur.setAtelier("Atelier A");
+        mockTesteur.setLigne("Ligne 1");
+        mockTesteur.setBancTest("Banc Test 1");
+
+        when(testeurRepository.findAll()).thenReturn(Arrays.asList(mockTesteur));
+
+        // When & Then
+        mockMvc.perform(get("/PI/testeurs/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].codeGMAO").value("TEST001"))
+                .andExpect(jsonPath("$[0].atelier").value("Atelier A"))
+                .andExpect(jsonPath("$[0].ligne").value("Ligne 1"))
+                .andExpect(jsonPath("$[0].bancTest").value("Banc Test 1"));
+
+        verify(testeurRepository, times(1)).findAll();
+    }
+
+    @Test
+    @WithMockUser(roles = "TECHNICIEN_CURATIF")
+    void testCreateBonDeTravail_Integration() throws Exception {
+        // Given
+        User mockTechnicien = new User();
+        mockTechnicien.setId(1L);
+        mockTechnicien.setFirstname("John");
+        mockTechnicien.setLastname("Doe");
+
+        Component mockComponent = new Component();
+        mockComponent.setTrartArticle("COMP001");
+        mockComponent.setTrartDesignation("Composant Test");
+        mockComponent.setTrartQuantite("10");
+
+        DemandeIntervention mockIntervention = new DemandeIntervention();
+        mockIntervention.setId(1L);
+        mockIntervention.setDescription("Intervention test");
+
+        Testeur mockTesteur = new Testeur();
+        mockTesteur.setCodeGMAO("TEST001");
+        mockTesteur.setAtelier("Atelier A");
+
+        BonDeTravail mockBonDeTravail = new BonDeTravail();
+        mockBonDeTravail.setId(1L);
+        mockBonDeTravail.setDescription("Bon de travail test");
+        mockBonDeTravail.setDateCreation(LocalDate.now());
+        mockBonDeTravail.setStatut(StatutBonTravail.EN_ATTENTE);
+        mockBonDeTravail.setTechnicien(mockTechnicien);
+
+        when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(mockTechnicien));
+        when(interventionRepository.findById(1L)).thenReturn(java.util.Optional.of(mockIntervention));
+        when(testeurRepository.findById("TEST001")).thenReturn(java.util.Optional.of(mockTesteur));
+        when(componentRepository.findById("COMP001")).thenReturn(java.util.Optional.of(mockComponent));
+        when(bonDeTravailRepository.save(any(BonDeTravail.class))).thenReturn(mockBonDeTravail);
+
+        BonTravailRequest request = new BonTravailRequest();
+        request.description = "Test bon de travail";
+        request.dateCreation = LocalDate.now();
+        request.statut = StatutBonTravail.EN_ATTENTE;
+        request.technicien = 1L;
+        request.interventionId = 1L;
+        request.testeurCodeGMAO = "TEST001";
+
+        BonTravailRequest.ComposantQuantite composant = new BonTravailRequest.ComposantQuantite();
+        composant.id = "COMP001";
+        composant.quantite = 2;
+        request.composants = Arrays.asList(composant);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/pi/bons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.description").value("Bon de travail test"));
+
+        verify(bonDeTravailRepository, times(1)).save(any(BonDeTravail.class));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testWorkflowIntegration_CreateInterventionToBonDeTravail() throws Exception {
+        // This test simulates the complete workflow:
+        // 1. Create intervention
+        // 2. Assign technician
+        // 3. Assign testeur
+        // 4. Create bon de travail
+        // 5. Confirm intervention
+
+        Long interventionId = 1L;
+        Long technicienId = 2L;
+        String testeurCodeGMAO = "TEST001";
+
+        // Step 1: Mock intervention exists
+        Map<String, Object> mockIntervention = new HashMap<>();
+        mockIntervention.put("id", interventionId);
+        mockIntervention.put("description", "Test workflow");
+        mockIntervention.put("statut", "EN_ATTENTE");
+        mockIntervention.put("type_demande", "CURATIVE");
+        mockIntervention.put("panne", "Test panne");
+        mockIntervention.put("urgence", true);
+        mockIntervention.put("technicien_id", null);
+        mockIntervention.put("testeur_code_gmao", null);
+        mockIntervention.put("confirmation", 0);
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockIntervention));
+
+        // Step 2: Assign technician
+        when(userRepository.existsById(technicienId)).thenReturn(true);
+        when(demandeInterventionRepository.assignTechnicianNative(interventionId, technicienId))
+                .thenReturn(1);
+
+        Map<String, Object> mockInterventionWithTech = new HashMap<>(mockIntervention);
+        mockInterventionWithTech.put("technicien_id", technicienId);
+        mockInterventionWithTech.put("statut", "EN_COURS");
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockIntervention))
+                .thenReturn(Arrays.asList(mockInterventionWithTech));
+
+        mockMvc.perform(put("/PI/demandes/assign/{interventionId}/technicien/{technicienId}",
+                        interventionId, technicienId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.technicienAssigneId").value(technicienId))
+                .andExpect(jsonPath("$.statut").value("EN_COURS"));
+
+        // Step 3: Assign testeur
+        when(testeurRepository.existsById(testeurCodeGMAO)).thenReturn(true);
+        when(demandeInterventionRepository.assignTesteurNative(interventionId, testeurCodeGMAO))
+                .thenReturn(1);
+
+        Map<String, Object> mockInterventionWithTesteur = new HashMap<>(mockInterventionWithTech);
+        mockInterventionWithTesteur.put("testeur_code_gmao", testeurCodeGMAO);
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockInterventionWithTech))
+                .thenReturn(Arrays.asList(mockInterventionWithTesteur));
+
+        mockMvc.perform(put("/PI/demandes/assign/{interventionId}/testeur/{testeurCodeGMAO}",
+                        interventionId, testeurCodeGMAO))
+                .andExpected(status().isOk())
+                .andExpect(jsonPath("$.testeurCodeGMAO").value(testeurCodeGMAO));
+
+        // Step 4: Confirm intervention
+        when(demandeInterventionRepository.confirmerInterventionNative(interventionId))
+                .thenReturn(1);
+
+        Map<String, Object> mockInterventionConfirmed = new HashMap<>(mockInterventionWithTesteur);
+        mockInterventionConfirmed.put("confirmation", 1);
+        mockInterventionConfirmed.put("statut", "TERMINEE");
+        mockInterventionConfirmed.put("date_validation", new Date());
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockInterventionWithTesteur))
+                .thenReturn(Arrays.asList(mockInterventionConfirmed));
+
+        mockMvc.perform(put("/PI/demandes/confirmer/{interventionId}", interventionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmation").value(1))
+                .andExpect(jsonPath("$.statut").value("TERMINEE"));
+
+        // Verify all steps were executed
+        verify(demandeInterventionRepository, times(1))
+                .assignTechnicianNative(interventionId, technicienId);
+        verify(demandeInterventionRepository, times(1))
+                .assignTesteurNative(interventionId, testeurCodeGMAO);
+        verify(demandeInterventionRepository, times(1))
+                .confirmerInterventionNative(interventionId);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testErrorHandling_InterventionNotFound() throws Exception {
+        // Given
+        Long nonExistentId = 999L;
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList());
+
+        // When & Then
+        mockMvc.perform(put("/PI/demandes/assign/{interventionId}/technicien/{technicienId}",
+                        nonExistentId, 1L))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testErrorHandling_TechnicienNotFound() throws Exception {
+        // Given
+        Long interventionId = 1L;
+        Long nonExistentTechnicienId = 999L;
+
+        Map<String, Object> mockIntervention = new HashMap<>();
+        mockIntervention.put("id", interventionId);
+        mockIntervention.put("statut", "EN_ATTENTE");
+
+        when(demandeInterventionRepository.findAllWithNullSafeDates())
+                .thenReturn(Arrays.asList(mockIntervention));
+        when(userRepository.existsById(nonExistentTechnicienId)).thenReturn(false);
+
+        // When & Then
+        mockMvc.perform(put("/PI/demandes/assign/{interventionId}/technicien/{technicienId}",
+                        interventionId, nonExistentTechnicienId))
+                .andExpect(status().isInternalServerError());
+    }
+}
