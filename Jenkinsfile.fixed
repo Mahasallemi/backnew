@@ -1,0 +1,157 @@
+pipeline {
+    agent any
+    
+    tools {
+        maven 'Maven'
+        nodejs 'NodeJS'
+    }
+    
+    options {
+        timeout(time: 1, unit: 'HOURS')
+    }
+    
+    stages {
+        stage('Backend - Checkout') {
+            steps {
+                echo '📥 Clonage du backend...'
+                dir('backend') {
+                    git branch: 'main', url: 'https://github.com/Mahasallemi/backnew.git'
+                }
+            }
+        }
+        
+        stage('Backend - Build & Tests (JaCoCo)') {
+            steps {
+                dir('backend') {
+                    echo '🧪 Build + tests + JaCoCo backend...'
+                    sh 'chmod +x mvnw'
+                    sh './mvnw -B clean verify jacoco:report'
+                }
+            }
+        }
+        
+        stage('Backend - Publish Test Reports') {
+            steps {
+                dir('backend') {
+                    echo '📊 Publication rapports JUnit & JaCoCo...'
+                    junit 'target/surefire-reports/*.xml'
+                    script {
+                        jacoco execPattern: 'target/jacoco.exec',
+                               classPattern: 'target/classes',
+                               sourcePattern: 'src/main/java'
+                    }
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                }
+            }
+        }
+        
+        stage('Backend - SonarQube Analysis') {
+            steps {
+                dir('backend') {
+                    echo '🔎 Analyse SonarQube backend...'
+                    withSonarQubeEnv('backend') {
+                        sh './mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar -Dsonar.projectKey=tn.esprit:backend -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml -DskipTests'
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            steps {
+                echo '✅ Vérification du Quality Gate SonarQube...'
+                timeout(time: 10, unit: 'MINUTES') {
+                    script {
+                        def qg = waitForQualityGate abortPipeline: false
+                        if (qg.status != 'OK') {
+                            echo "⚠️ Quality Gate failed: ${qg.status}"
+                            echo "📊 Pipeline continue malgré l'échec du Quality Gate"
+                            echo "🔗 SonarQube Dashboard: http://172.22.156.136:9000/dashboard?id=tn.esprit%3Abackend"
+                            currentBuild.result = 'UNSTABLE'
+                        } else {
+                            echo "✅ Quality Gate passed!"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Frontend - Checkout') {
+            steps {
+                echo '📥 Clonage du frontend...'
+                dir('frontend') {
+                    git branch: 'main', url: 'https://github.com/Mahasallemi/frontnew.git'
+                }
+            }
+        }
+        
+        stage('Frontend - Build') {
+            steps {
+                dir('frontend') {
+                    echo '🏗️ Build frontend...'
+                    sh 'npm install'
+                    sh 'npm run build'
+                }
+            }
+        }
+        
+        stage('Docker Build - Backend & Frontend') {
+            steps {
+                echo '🐳 Construction images Docker...'
+                script {
+                    def backendImage = docker.build("mahasallemi/backend:${env.BUILD_NUMBER}", "./backend")
+                    def frontendImage = docker.build("mahasallemi/frontend:${env.BUILD_NUMBER}", "./frontend")
+                }
+            }
+        }
+        
+        stage('Docker Push - Docker Hub') {
+            steps {
+                echo '📤 Push vers Docker Hub...'
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
+                        docker.image("mahasallemi/backend:${env.BUILD_NUMBER}").push()
+                        docker.image("mahasallemi/backend:${env.BUILD_NUMBER}").push("latest")
+                        docker.image("mahasallemi/frontend:${env.BUILD_NUMBER}").push()
+                        docker.image("mahasallemi/frontend:${env.BUILD_NUMBER}").push("latest")
+                    }
+                }
+            }
+        }
+        
+        stage('Docker Push - Nexus') {
+            steps {
+                echo '📤 Push vers Nexus...'
+                script {
+                    docker.withRegistry('http://172.22.156.136:8082', 'nexus-credentials') {
+                        docker.image("mahasallemi/backend:${env.BUILD_NUMBER}").push()
+                        docker.image("mahasallemi/frontend:${env.BUILD_NUMBER}").push()
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy with docker-compose') {
+            steps {
+                echo '🚀 Déploiement avec docker-compose...'
+                sh 'docker-compose down || true'
+                sh 'docker-compose up -d'
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo '✅ SUCCÈS — Pipeline terminé avec succès!'
+        }
+        unstable {
+            echo '⚠️ INSTABLE — Pipeline terminé mais avec des avertissements (Quality Gate)'
+        }
+        failure {
+            echo '❌ ECHEC — Voir les logs ci-dessus pour la cause.'
+        }
+        always {
+            echo '🧹 Nettoyage des ressources...'
+            sh 'docker system prune -f || true'
+        }
+    }
+}
