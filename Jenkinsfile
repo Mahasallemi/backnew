@@ -136,7 +136,7 @@ pipeline {
 
         stage('Frontend - Build') {
             steps {
-                dir('frontend/notus-react-main') {
+                dir('frontend') {
                     echo '🎨 Build du frontend React...'
                     sh '''
                         if [ -f package-lock.json ]; then
@@ -167,7 +167,7 @@ pipeline {
                     '''
                 }
 
-                dir('frontend/notus-react-main') {
+                dir('frontend') {
                     sh '''
                         docker build \
                           -t ${FRONTEND_IMAGE_DH}:${FRONTEND_VERSION} \
